@@ -40,73 +40,71 @@ def handle_message(sender_id, message_text):
     step = session["step"]
     text = message_text.strip()
 
-    # Detect "not interested" at any point
-    no_interest_keywords = ["no me interesa", "no gracias", "no quiero", "solo estaba viendo", "adiós", "adios", "no", "salir"]
-    if any(kw in text.lower() for kw in no_interest_keywords) and step not in [6, 7, 8, 9]:
-        send_message(sender_id, "😊 ¡No te preocupes! Gracias por visitarnos 🙌 Si en algún momento deseas más información, aquí estaremos. ¡Éxitos! 🚀")
+    # Detect no interest at any step except data collection
+    no_interest_keywords = ["no me interesa", "no gracias", "no quiero", "salir", "adios", "adiós", "cancelar"]
+    if any(kw in text.lower() for kw in no_interest_keywords) and step not in [3, 4, 5, 6]:
+        send_message(sender_id,
+            "😊 ¡No te preocupes!\n\nGracias por visitar nuestra página 🙌 Si más adelante deseas recibir información, estaremos felices de ayudarte.\n\n¡Muchos éxitos! 🚀"
+        )
         sessions[sender_id] = {"step": 0, "data": {}}
         return
 
+    # STEP 0 — Start / any message triggers welcome
     if step == 0:
         send_buttons(sender_id,
-            "😊 ¡Hola! Gracias por escribirnos.\n\nVimos tu interés en la información que estamos compartiendo y queremos conocerte un poco más 🙌\n\nCuéntame… ¿Qué fue lo que más llamó tu atención?",
-            [
-                "💰 Generar ingresos",
-                "🏠 Trabajar desde casa",
-                "🚀 Emprender",
-                "💪 Bienestar y desarrollo",
-                "🤔 Quiero información",
-                "❌ Solo estaba viendo"
-            ]
+            "😊 ¡Hola! Gracias por escribirnos.\n\nMiles de personas hoy están buscando nuevas formas de generar ingresos, crecer y mejorar su calidad de vida 🙌\n\nCuéntame… ¿Qué fue lo que más te llamó la atención?",
+            ["💰 Más ingresos", "🏠 Desde casa", "🚀 Emprender", "💪 Bienestar", "👀 Solo miraba"]
         )
         session["step"] = 1
 
+    # STEP 1 — Interest selection
     elif step == 1:
-        if "solo estaba viendo" in text.lower():
-            send_message(sender_id, "😊 ¡No te preocupes! Gracias por visitarnos 🙌 Si en algún momento deseas más información, aquí estaremos. ¡Éxitos! 🚀")
+        if "solo miraba" in text.lower():
+            send_message(sender_id,
+                "😊 ¡No te preocupes!\n\nGracias por visitar nuestra página 🙌 Si más adelante deseas recibir información, estaremos felices de ayudarte.\n\n¡Muchos éxitos! 🚀"
+            )
             sessions[sender_id] = {"step": 0, "data": {}}
             return
         session["data"]["interes"] = text
         send_buttons(sender_id,
-            "Excelente 🙌\n\nMuchas personas llegan aquí buscando un cambio, ingresos extra o simplemente una nueva oportunidad.\n\n¿Cuál de estas opciones se parece más a tu situación actual?",
-            [
-                "💼 Tengo trabajo pero quiero mejorar",
-                "🔎 Estoy buscando una oportunidad",
-                "🏠 Tengo tiempo disponible",
-                "🚀 Quiero crecer económicamente",
-                "📈 Quiero aprender algo nuevo"
-            ]
+            "Excelente 🙌\n\nMuchas personas llegan aquí porque sienten que quieren un cambio, ganar más o simplemente conocer nuevas oportunidades.\n\n¿Cuál de estas opciones se parece más a ti?",
+            ["💼 Tengo trabajo", "🔎 Busco algo", "🚀 Quiero crecer", "📈 Aprender más", "⏰ Tengo tiempo"]
         )
         session["step"] = 2
 
+    # STEP 2 — Profile selection
     elif step == 2:
         session["data"]["situacion"] = text
         send_message(sender_id,
-            "Perfecto 👍\n\nPor lo que me comentas, creemos que esta información puede aportarte muchísimo valor.\n\nEstamos seleccionando personas para participar en nuestras reuniones informativas y capacitaciones presenciales 🙌\n\nAhí podrás conocer:\n✅ Cómo funciona el sistema\n✅ Cómo empiezan las personas desde cero\n✅ Historias reales de resultados\n✅ Cómo generar ingresos adicionales\n\nPara enviarte la información completa y ayudarte con tu acceso, necesito registrarte 😊\n\n¿Cuál es tu nombre completo?"
+            "Perfecto 👍\n\nJustamente estamos compartiendo información con personas que quieren crecer y conocer algo diferente 🙌\n\nEn nuestras reuniones podrás conocer:\n✅ Cómo empiezan las personas desde cero\n✅ Historias reales\n✅ Cómo generar ingresos adicionales\n✅ El sistema de apoyo y capacitación\n\nY lo mejor… no necesitas experiencia previa 😊\n\nPara ayudarte con la información completa y enviarte tu invitación, necesito registrarte 👇\n\n¿Cuál es tu nombre completo?"
         )
         session["step"] = 3
 
+    # STEP 3 — Name
     elif step == 3:
         session["data"]["nombre"] = text
-        send_message(sender_id, "¿Cuántos años tienes?")
+        send_message(sender_id, "1️⃣ ¿Cuántos años tienes?")
         session["step"] = 4
 
+    # STEP 4 — Age
     elif step == 4:
         session["data"]["edad"] = text
-        send_message(sender_id, "¿En qué distrito vives?")
+        send_message(sender_id, "2️⃣ ¿En qué distrito vives?")
         session["step"] = 5
 
+    # STEP 5 — District
     elif step == 5:
         session["data"]["distrito"] = text
-        send_message(sender_id, "¿Cuál es tu número de WhatsApp? (con código de país, ej: +51 987 654 321)")
+        send_message(sender_id, "3️⃣ ¿Cuál es tu número de WhatsApp? (ej: +51 987 654 321)")
         session["step"] = 6
 
+    # STEP 6 — WhatsApp
     elif step == 6:
         session["data"]["whatsapp"] = text
         nombre = session["data"].get("nombre", "")
         leads.append({**session["data"]})
         send_message(sender_id,
-            f"✅ Perfecto, {nombre}. Ya registramos tus datos 🙌\n\nEn breve, un asesor de nuestro equipo se pondrá en contacto contigo por WhatsApp para enviarte la invitación oficial con todos los detalles del evento 📍\n\nAhí también podrá ayudarte con:\n✅ Ubicación exacta\n✅ Horario\n✅ Confirmación de asistencia\n✅ Cualquier duda que tengas\n\nTe recomendamos estar atento a tu WhatsApp porque los cupos suelen llenarse rápido 🚀"
+            f"🔥 Excelente, {nombre}.\n\nTu registro quedó realizado correctamente 🙌\n\nEn breve, uno de nuestros asesores se comunicará contigo por WhatsApp para enviarte la invitación oficial y ayudarte con todos los detalles del evento 📍\n\nAhí podrás confirmar:\n✅ Horario\n✅ Ubicación\n✅ Asistencia\n✅ Y cualquier consulta que tengas\n\n📲 Te recomendamos estar atento a tu WhatsApp porque normalmente los cupos se completan rápido 🚀"
         )
         sessions[sender_id] = {"step": 0, "data": {}}
 
