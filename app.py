@@ -1,5 +1,4 @@
 import os
-import json
 import requests
 from flask import Flask, request, jsonify
 
@@ -8,25 +7,20 @@ app = Flask(__name__)
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "momentum2024")
 PAGE_ACCESS_TOKEN = os.environ.get("PAGE_ACCESS_TOKEN", "")
 
-# In-memory leads storage
 leads = []
-
-# User session storage
 sessions = {}
 
 def send_message(recipient_id, message_text):
-    url = f"https://graph.facebook.com/v18.0/me/messages"
-    headers = {"Content-Type": "application/json"}
+    url = "https://graph.facebook.com/v18.0/me/messages"
     params = {"access_token": PAGE_ACCESS_TOKEN}
     data = {
         "recipient": {"id": recipient_id},
         "message": {"text": message_text}
     }
-    requests.post(url, headers=headers, params=params, json=data)
+    requests.post(url, params=params, json=data)
 
 def send_buttons(recipient_id, text, buttons):
-    url = f"https://graph.facebook.com/v18.0/me/messages"
-    headers = {"Content-Type": "application/json"}
+    url = "https://graph.facebook.com/v18.0/me/messages"
     params = {"access_token": PAGE_ACCESS_TOKEN}
     quick_replies = [{"content_type": "text", "title": b, "payload": b} for b in buttons]
     data = {
@@ -36,22 +30,7 @@ def send_buttons(recipient_id, text, buttons):
             "quick_replies": quick_replies
         }
     }
-    requests.post(url, headers=headers, params=params, json=data)
-
-def send_image(recipient_id, image_url):
-    url = f"https://graph.facebook.com/v18.0/me/messages"
-    headers = {"Content-Type": "application/json"}
-    params = {"access_token": PAGE_ACCESS_TOKEN}
-    data = {
-        "recipient": {"id": recipient_id},
-        "message": {
-            "attachment": {
-                "type": "image",
-                "payload": {"url": image_url, "is_reusable": True}
-            }
-        }
-    }
-    requests.post(url, headers=headers, params=params, json=data)
+    requests.post(url, params=params, json=data)
 
 def handle_message(sender_id, message_text):
     if sender_id not in sessions:
@@ -61,91 +40,75 @@ def handle_message(sender_id, message_text):
     step = session["step"]
     text = message_text.strip()
 
+    # Detect "not interested" at any point
+    no_interest_keywords = ["no me interesa", "no gracias", "no quiero", "solo estaba viendo", "adiós", "adios", "no", "salir"]
+    if any(kw in text.lower() for kw in no_interest_keywords) and step not in [6, 7, 8, 9]:
+        send_message(sender_id, "😊 ¡No te preocupes! Gracias por visitarnos 🙌 Si en algún momento deseas más información, aquí estaremos. ¡Éxitos! 🚀")
+        sessions[sender_id] = {"step": 0, "data": {}}
+        return
+
     if step == 0:
-        send_message(sender_id, "😊 ¡Hola! Bienvenido a Reinvéntate 40+.\n\nSomos una comunidad de personas que buscan una nueva oportunidad para generar ingresos, aprender algo nuevo y rodearse de un ambiente positivo 🙌\n\nCuéntame, ¿cuál de estas opciones te interesa más?")
-        send_buttons(sender_id, "Elige una opción:", [
-            "💰 Generar ingresos extra",
-            "🏠 Trabajar desde casa",
-            "🚀 Emprender mi negocio",
-            "💪 Mejorar mi bienestar"
-        ])
+        send_buttons(sender_id,
+            "😊 ¡Hola! Gracias por escribirnos.\n\nVimos tu interés en la información que estamos compartiendo y queremos conocerte un poco más 🙌\n\nCuéntame… ¿Qué fue lo que más llamó tu atención?",
+            [
+                "💰 Generar ingresos",
+                "🏠 Trabajar desde casa",
+                "🚀 Emprender",
+                "💪 Bienestar y desarrollo",
+                "🤔 Quiero información",
+                "❌ Solo estaba viendo"
+            ]
+        )
         session["step"] = 1
 
     elif step == 1:
+        if "solo estaba viendo" in text.lower():
+            send_message(sender_id, "😊 ¡No te preocupes! Gracias por visitarnos 🙌 Si en algún momento deseas más información, aquí estaremos. ¡Éxitos! 🚀")
+            sessions[sender_id] = {"step": 0, "data": {}}
+            return
         session["data"]["interes"] = text
-        send_buttons(sender_id, "¡Excelente! ¿Cuál es tu situación laboral actual?", [
-            "✅ Trabajo tiempo completo",
-            "🔧 Trabajo independiente",
-            "❌ No trabajo actualmente",
-            "🔎 Estoy buscando opciones"
-        ])
+        send_buttons(sender_id,
+            "Excelente 🙌\n\nMuchas personas llegan aquí buscando un cambio, ingresos extra o simplemente una nueva oportunidad.\n\n¿Cuál de estas opciones se parece más a tu situación actual?",
+            [
+                "💼 Tengo trabajo pero quiero mejorar",
+                "🔎 Estoy buscando una oportunidad",
+                "🏠 Tengo tiempo disponible",
+                "🚀 Quiero crecer económicamente",
+                "📈 Quiero aprender algo nuevo"
+            ]
+        )
         session["step"] = 2
 
     elif step == 2:
         session["data"]["situacion"] = text
-        send_buttons(sender_id, "¿Buscas ingresos adicionales o un cambio más grande?", [
-            "💵 Solo ingresos extra",
-            "🔄 Un cambio importante",
-            "🚀 Quiero emprender",
-            "🤔 Estoy evaluando"
-        ])
+        send_message(sender_id,
+            "Perfecto 👍\n\nPor lo que me comentas, creemos que esta información puede aportarte muchísimo valor.\n\nEstamos seleccionando personas para participar en nuestras reuniones informativas y capacitaciones presenciales 🙌\n\nAhí podrás conocer:\n✅ Cómo funciona el sistema\n✅ Cómo empiezan las personas desde cero\n✅ Historias reales de resultados\n✅ Cómo generar ingresos adicionales\n\nPara enviarte la información completa y ayudarte con tu acceso, necesito registrarte 😊\n\n¿Cuál es tu nombre completo?"
+        )
         session["step"] = 3
 
     elif step == 3:
-        session["data"]["objetivo"] = text
-        send_buttons(sender_id, "¿Cuánto tiempo podrías dedicarle?", [
-            "⏱ 1 a 2 horas al día",
-            "🕐 Medio tiempo",
-            "🕐 Tiempo completo",
-            "📊 Depende de la oportunidad"
-        ])
+        session["data"]["nombre"] = text
+        send_message(sender_id, "¿Cuántos años tienes?")
         session["step"] = 4
 
     elif step == 4:
-        session["data"]["tiempo"] = text
-        send_message(sender_id, "Perfecto 🙌\n\nPor lo que me comentas, creo que esta oportunidad podría interesarte mucho.\n\nEstamos realizando reuniones presenciales donde explicamos:\n✅ Cómo generar ingresos\n✅ Cómo funciona el sistema\n✅ Cómo empezar desde cero\n✅ Trabajo en equipo y desarrollo personal\n\nLa asistencia es GRATUITA y sin compromiso.")
-        send_buttons(sender_id, "¿Te gustaría asistir?", [
-            "✅ Sí, quiero asistir",
-            "📋 Quiero más información"
-        ])
+        session["data"]["edad"] = text
+        send_message(sender_id, "¿En qué distrito vives?")
         session["step"] = 5
 
     elif step == 5:
-        session["data"]["asistencia"] = text
-        if "asistir" in text.lower() or "sí" in text.lower():
-            send_message(sender_id, "¡Excelente decisión! 🎉 Aquí está tu invitación:")
-            send_image(sender_id, "https://i.imgur.com/placeholder.jpg")  # Replace with real image URL
-            send_message(sender_id, "🎟️ Seminario del Éxito\n📅 Sábado 16 de Mayo, 4:45 PM\n📍 Calle Sacramento 236, Surco Coworking de la Municipalidad\n✅ Entrada libre y sin compromiso")
-        else:
-            send_message(sender_id, "¡Con gusto te cuento más! Es un seminario gratuito donde conocerás cómo generar ingresos y ser parte de una comunidad que crece 🌟")
-        send_message(sender_id, "Para separarte un lugar necesito algunos datos 😊\n\n¿Cuál es tu nombre completo?")
+        session["data"]["distrito"] = text
+        send_message(sender_id, "¿Cuál es tu número de WhatsApp? (con código de país, ej: +51 987 654 321)")
         session["step"] = 6
 
     elif step == 6:
-        session["data"]["nombre"] = text
-        send_message(sender_id, f"Mucho gusto, {text} 😊\n\n¿Cuántos años tienes?")
-        session["step"] = 7
-
-    elif step == 7:
-        session["data"]["edad"] = text
-        send_message(sender_id, "¿En qué distrito vives?")
-        session["step"] = 8
-
-    elif step == 8:
-        session["data"]["distrito"] = text
-        send_message(sender_id, "¿Cuál es tu número de WhatsApp? (con código de país, ej: +51 987 654 321)")
-        session["step"] = 9
-
-    elif step == 9:
         session["data"]["whatsapp"] = text
-        leads.append({**session["data"]})
         nombre = session["data"].get("nombre", "")
-        send_message(sender_id, f"✅ ¡Perfecto, {nombre}!\n\nTus datos han sido registrados. Uno de nuestros coordinadores te contactará por WhatsApp para confirmarte el horario.\n\n📍 Oficina en Surco\n🕒 Horarios flexibles\n🎯 Sin costo y sin compromiso\n\n¡Nos vemos pronto! 🚀")
-        session["step"] = 10
-
-    elif step == 10:
-        send_message(sender_id, "¡Gracias por tu interés! 🌟 Recuerda que este puede ser el inicio de algo increíble. ¡Mucho ánimo! 💪\n\nSi tienes alguna pregunta adicional, escríbenos cuando quieras.")
-        session["step"] = 0
+        leads.append({**session["data"]})
+        send_message(sender_id,
+            f"✅ Perfecto, {nombre}. Ya registramos tus datos 🙌\n\nEn breve, un asesor de nuestro equipo se pondrá en contacto contigo por WhatsApp para enviarte la invitación oficial con todos los detalles del evento 📍\n\nAhí también podrá ayudarte con:\n✅ Ubicación exacta\n✅ Horario\n✅ Confirmación de asistencia\n✅ Cualquier duda que tengas\n\nTe recomendamos estar atento a tu WhatsApp porque los cupos suelen llenarse rápido 🚀"
+        )
+        sessions[sender_id] = {"step": 0, "data": {}}
 
 @app.route("/webhook", methods=["GET"])
 def verify():
@@ -178,7 +141,7 @@ def get_leads():
 
 @app.route("/", methods=["GET"])
 def home():
-    return "Momentum Bot activo ✅"
+    return "Bot activo ✅"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
