@@ -1,13 +1,14 @@
 import os
 import requests
 from flask import Flask, request, jsonify
+from datetime import datetime
 
 app = Flask(__name__)
 
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "momentum2024")
 PAGE_ACCESS_TOKEN = os.environ.get("PAGE_ACCESS_TOKEN", "")
+SHEETS_URL = "https://script.google.com/macros/s/AKfycbxXQhVFrFBEx3vhcaGu2u-oCbG0xFmsmWmQAE96F1H3NRIamCob5ny4nV27fy7ieDDdZg/exec"
 
-leads = []
 sessions = {}
 
 def send_message(recipient_id, message_text):
@@ -32,9 +33,23 @@ def send_buttons(recipient_id, text, buttons):
     }
     requests.post(url, params=params, json=data)
 
-def handle_message(sender_id, message_text):
+def save_to_sheets(lead_data):
+    try:
+        requests.post(SHEETS_URL, json=lead_data, timeout=10)
+    except Exception as e:
+        print(f"Error saving to sheets: {e}")
+
+def get_page_name(page_id):
+    pages = {
+        "1071599096044735": "Momentum Expansión",
+        "1147098975149726": "Reinvéntate 40+",
+        "1161939380326544": "Imperia Network",
+    }
+    return pages.get(str(page_id), "Página Desconocida")
+
+def handle_message(sender_id, message_text, page_id):
     if sender_id not in sessions:
-        sessions[sender_id] = {"step": 0, "data": {}}
+        sessions[sender_id] = {"step": 0, "data": {}, "page_id": page_id}
 
     session = sessions[sender_id]
     step = session["step"]
@@ -46,10 +61,9 @@ def handle_message(sender_id, message_text):
         send_message(sender_id,
             "😊 ¡No te preocupes!\n\nGracias por visitar nuestra página 🙌 Si más adelante deseas recibir información, estaremos felices de ayudarte.\n\n¡Muchos éxitos! 🚀"
         )
-        sessions[sender_id] = {"step": 0, "data": {}}
+        sessions[sender_id] = {"step": 0, "data": {}, "page_id": page_id}
         return
 
-    # STEP 0 — Start / any message triggers welcome
     if step == 0:
         send_buttons(sender_id,
             "😊 ¡Hola! Gracias por escribirnos.\n\nMiles de personas hoy están buscando nuevas formas de generar ingresos, crecer y mejorar su calidad de vida 🙌\n\nCuéntame… ¿Qué fue lo que más te llamó la atención?",
@@ -57,13 +71,12 @@ def handle_message(sender_id, message_text):
         )
         session["step"] = 1
 
-    # STEP 1 — Interest selection
     elif step == 1:
         if "solo miraba" in text.lower():
             send_message(sender_id,
                 "😊 ¡No te preocupes!\n\nGracias por visitar nuestra página 🙌 Si más adelante deseas recibir información, estaremos felices de ayudarte.\n\n¡Muchos éxitos! 🚀"
             )
-            sessions[sender_id] = {"step": 0, "data": {}}
+            sessions[sender_id] = {"step": 0, "data": {}, "page_id": page_id}
             return
         session["data"]["interes"] = text
         send_buttons(sender_id,
@@ -72,7 +85,6 @@ def handle_message(sender_id, message_text):
         )
         session["step"] = 2
 
-    # STEP 2 — Profile selection
     elif step == 2:
         session["data"]["situacion"] = text
         send_message(sender_id,
@@ -80,33 +92,42 @@ def handle_message(sender_id, message_text):
         )
         session["step"] = 3
 
-    # STEP 3 — Name
     elif step == 3:
         session["data"]["nombre"] = text
         send_message(sender_id, "1️⃣ ¿Cuántos años tienes?")
         session["step"] = 4
 
-    # STEP 4 — Age
     elif step == 4:
         session["data"]["edad"] = text
         send_message(sender_id, "2️⃣ ¿En qué distrito vives?")
         session["step"] = 5
 
-    # STEP 5 — District
     elif step == 5:
         session["data"]["distrito"] = text
         send_message(sender_id, "3️⃣ ¿Cuál es tu número de WhatsApp? (ej: +51 987 654 321)")
         session["step"] = 6
 
-    # STEP 6 — WhatsApp
     elif step == 6:
         session["data"]["whatsapp"] = text
         nombre = session["data"].get("nombre", "")
-        leads.append({**session["data"]})
+        page_name = get_page_name(session.get("page_id", page_id))
+
+        # Save to Google Sheets
+        save_to_sheets({
+            "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "nombre": session["data"].get("nombre", ""),
+            "edad": session["data"].get("edad", ""),
+            "distrito": session["data"].get("distrito", ""),
+            "whatsapp": session["data"].get("whatsapp", ""),
+            "interes": session["data"].get("interes", ""),
+            "situacion": session["data"].get("situacion", ""),
+            "pagina": page_name
+        })
+
         send_message(sender_id,
             f"🔥 Excelente, {nombre}.\n\nTu registro quedó realizado correctamente 🙌\n\nEn breve, uno de nuestros asesores se comunicará contigo por WhatsApp para enviarte la invitación oficial y ayudarte con todos los detalles del evento 📍\n\nAhí podrás confirmar:\n✅ Horario\n✅ Ubicación\n✅ Asistencia\n✅ Y cualquier consulta que tengas\n\n📲 Te recomendamos estar atento a tu WhatsApp porque normalmente los cupos se completan rápido 🚀"
         )
-        sessions[sender_id] = {"step": 0, "data": {}}
+        sessions[sender_id] = {"step": 0, "data": {}, "page_id": page_id}
 
 @app.route("/webhook", methods=["GET"])
 def verify():
@@ -122,20 +143,17 @@ def webhook():
     data = request.json
     if data.get("object") == "page":
         for entry in data.get("entry", []):
+            page_id = entry.get("id", "")
             for event in entry.get("messaging", []):
                 sender_id = event["sender"]["id"]
                 if "message" in event:
                     msg = event["message"]
                     text = msg.get("text", "")
                     if text:
-                        handle_message(sender_id, text)
+                        handle_message(sender_id, text, page_id)
                 elif "postback" in event:
-                    handle_message(sender_id, event["postback"]["payload"])
+                    handle_message(sender_id, event["postback"]["payload"], page_id)
     return jsonify({"status": "ok"})
-
-@app.route("/leads", methods=["GET"])
-def get_leads():
-    return jsonify(leads)
 
 @app.route("/", methods=["GET"])
 def home():
